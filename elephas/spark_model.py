@@ -1,7 +1,9 @@
 import json
+from collections import defaultdict
 from functools import partial
 from itertools import tee
 from typing import Union
+from unittest.mock import Mock
 
 import h5py
 import numpy as np
@@ -11,13 +13,57 @@ from tensorflow.keras.models import load_model
 from tensorflow.keras.models import model_from_yaml
 from tensorflow.keras.optimizers import get as get_optimizer
 from tensorflow.keras.optimizers import serialize as serialize_optimizer
+from tensorflow.keras.callbacks import Callback
+
 
 from .mllib import to_matrix, from_matrix, to_vector, from_vector
 from .parameter.factory import ClientServerFactory
-from .utils import lp_to_simple_rdd, to_simple_rdd
+from .utils import lp_to_simple_rdd, to_simple_rdd, RWLock
 from .utils import model_to_dict
 from .utils import subtract_params, divide_by
 from .worker import AsynchronousSparkWorker, SparkWorker
+
+
+class ThreadSafeCallback(Callback):
+    def __init__(self, callback):
+        super().__init__()
+        self.callback = callback
+
+    def on_train_begin(self, logs=None):
+        lock = RWLock()
+        lock.acquire_write()
+        result = self.callback.on_train_begin(logs)
+        lock.release()
+        return result
+
+    def on_train_end(self, logs=None):
+        lock = RWLock()
+        lock.acquire_write()
+        result = self.callback.on_train_end(logs)
+        lock.release()
+        return result
+
+    def on_batch_begin(self, batch, logs=None):
+        lock = RWLock()
+        lock.acquire_write()
+        result = self.callback.on_batch_begin(batch, logs)
+        lock.release()
+        return result
+
+    def on_epoch_begin(self, epoch, logs=None):
+        lock = RWLock()
+        lock.acquire_write()
+        result = self.callback.on_epoch_begin(epoch, logs)
+        lock.release()
+        return result
+
+    def on_epoch_end(self, epoch, logs=None):
+        lock = RWLock()
+        lock.acquire_write()
+        self.callback.model = Mock()
+        result = self.callback.on_epoch_end(epoch, logs)
+        lock.release()
+        return result
 
 
 class SparkModel(object):
@@ -166,6 +212,10 @@ class SparkModel(object):
         yaml = self._master_network.to_yaml()
         init = self._master_network.get_weights()
         parameters = rdd.context.broadcast(init)
+        if 'callbacks' in train_config:
+            callbacks = train_config.pop('callbacks')
+            callbacks = [ThreadSafeCallback(callback) for callback in callbacks]
+            train_config['callbacks'] = rdd.context.broadcast(callbacks)
 
         if self.mode in ['asynchronous', 'hogwild']:
             print('>>> Initialize workers')

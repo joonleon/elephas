@@ -41,6 +41,8 @@ class SparkWorker(object):
                            metrics=self.master_metrics)
 
         weights_before_training = self.model.get_weights()
+        if 'callbacks' in self.train_config:
+            self.train_config['callbacks'] = self.train_config['callbacks'].value
         if x_train.shape[0] > self.train_config.get('batch_size'):
             self.model.fit(x_train, y_train, **self.train_config)
         weights_after_training = self.model.get_weights()
