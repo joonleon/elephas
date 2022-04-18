@@ -9,10 +9,10 @@ setup(name='elephas',
       author='Daniel Cahall',
       author_email='danielenricocahall@gmail.com',
       install_requires=['cython',
-                        'tensorflow-macos>=2,!=2.2.*',
+                        #'tensorflow-macos>=2,!=2.2.*',
                         'flask',
-                        'h5py==3.3.0',
-                        'pyspark==3.2'],
+                        'h5py==3.3.0'],
+                        #'pyspark==3.2'],
       extras_require={
         'tests': ['pytest', 'pytest-pep8', 'pytest-cov', 'pytest-spark', 'mock']
     },
